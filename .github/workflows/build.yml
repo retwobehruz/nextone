@@ -1,4 +1,4 @@
-name: Build Nextone APK
+name: Build APK
 
 on:
   push:
@@ -14,65 +14,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check for nextone.zip
-        id: chk
+      - name: Unzip project
         run: |
-          if [ -f nextone.zip ]; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-            echo "nextone.zip is not uploaded yet"
-          fi
-
-      - name: Unpack project
-        if: steps.chk.outputs.ok == 'true'
-        run: unzip -q nextone.zip
+          test -f nextone.zip
+          unzip -q -o nextone.zip
 
       - uses: actions/setup-java@v4
-        if: steps.chk.outputs.ok == 'true'
         with:
           distribution: temurin
           java-version: '17'
 
       - uses: subosito/flutter-action@v2
-        if: steps.chk.outputs.ok == 'true'
         with:
           channel: stable
-          cache: true
-
-      - name: Prepare Android files
-        if: steps.chk.outputs.ok == 'true'
-        working-directory: nextone
-        run: |
-          mkdir -p /tmp/bak
-          cp -r lib /tmp/bak/lib
-          cp -r test /tmp/bak/test
-          cp pubspec.yaml /tmp/bak/pubspec.yaml
-          flutter create --platforms=android --project-name nextone --org com.nextone .
-          rm -rf lib test
-          cp -r /tmp/bak/lib lib
-          cp -r /tmp/bak/test test
-          cp /tmp/bak/pubspec.yaml pubspec.yaml
-          sed -i 's/android:label="[^"]*"/android:label="Nextone"/' android/app/src/main/AndroidManifest.xml
-
-      - name: Get packages
-        if: steps.chk.outputs.ok == 'true'
-        working-directory: nextone
-        run: flutter pub get
 
       - name: Build APK
-        if: steps.chk.outputs.ok == 'true'
-        working-directory: nextone
-        run: flutter build apk --release
+        run: bash nextone/ci/build.sh
 
       - name: Publish release
-        if: steps.chk.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cp nextone/build/app/outputs/flutter-apk/app-release.apk Nextone.apk
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest Nextone.apk \
-            --title "Nextone (latest build)" \
-            --notes "Download Nextone.apk and install it on your Android phone." \
-            --target "${{ github.sha }}"
+          gh release create latest Nextone.apk --title "Nextone" --notes "Latest build" --latest
